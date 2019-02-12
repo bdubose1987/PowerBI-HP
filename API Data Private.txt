@@ -1,2 +1,0 @@
-// Shell_Access_Token
-"fb3a4f6f8f831a1679018988d52f836508eca73629b88c3e195818f3702abec4" meta [IsParameterQuery=true, Type="Text", IsParameterQueryRequired=true]
