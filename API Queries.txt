@@ -1,0 +1,1399 @@
+// Customer
+"CUSTOMER FROM URL HERE" meta [IsParameterQuery=true, Type="Any", IsParameterQueryRequired=true]
+
+// Access_Token
+"YOUR ACCESS TOKEN HERE" meta [IsParameterQuery=true, Type="Text", IsParameterQueryRequired=true]
+
+// Trip Legs
+let
+    HelipassAccessToken =Access_Token,
+    FirstPageUri = "https://hp-reporting-" & Customer & ".azurewebsites.net/trips/legs" & "?access_token=" & HelipassAccessToken & "&count=10000000",
+    MaxPages = 21,
+    GetPage = (pageUri, nextFilter, dataFilter) =>        
+        let
+            Result = let
+                    PageUri = pageUri,          
+                    PageContent = Web.Contents(PageUri),
+                    Document = Json.Document(PageContent),
+                    PageData = dataFilter(Document),
+                    NextPageUri = nextFilter(Document)
+                in
+                    [ NextPageUri = NextPageUri, PageData = PageData ]
+        in
+            Result,
+            
+    GetPages = (firstPageUri, nextFilter, dataFilter) =>
+        let
+            //pump the API one page at a time, collecting a list of data tables
+            PageDataList = List.Generate(
+                () => [
+                        pageNumber = 1, 
+                        pageResult = GetPage(firstPageUri, nextFilter, dataFilter)
+                    ],
+                each [pageResult] <> null and [pageResult][PageData] <> null,
+                each [
+                        pageNumber = [pageNumber] + 1, 
+                        pageResult = 
+                            if [pageResult][NextPageUri] <> null 
+                            then GetPage([pageResult][NextPageUri], nextFilter, dataFilter)
+                            else null
+                    ],
+                each [pageResult][PageData]
+            ),
+            CombinedData = List.Combine(PageDataList)
+        in
+            CombinedData,
+    
+    LocationData = GetPages(
+         FirstPageUri,
+        (doc) => 
+            let
+                Links = try doc[links] otherwise null,
+                LinksTable = Table.FromRecords(Links),
+                NextLinksTable = Table.SelectRows(LinksTable, each [rel] = "next"),
+                NextLink = try NextLinksTable{0} otherwise null
+            in
+                try NextLink[href] otherwise null,                
+        (doc) => doc[data]
+    ),
+    LocationTable = Table.FromRecords(LocationData),
+    #"Removed Columns" = Table.RemoveColumns(LocationTable,{"links"}),
+    #"Expanded data" = Table.ExpandRecordColumn(#"Removed Columns", "data", {"tripDetailsId", "onTripLocationId", "offTripLocationId", "ordinal", "availablePayload", "actualFuelWeight", "distance", "time", "tripName", "dispatchNotes", "fidsNotes", "pilotName", "copilotName", "transportNumber", "crewWeight", "maxGrossWeight", "aircraftBasicWeight", "type", "manualLockState", "averageFuelBurnRate", "maxCargoBayCapacity", "cancelReason", "transportType", "origin", "destination", "plannedArrivalTime", "actualArrivalTime", "plannedDepartureTime", "actualDepartureTime"}, {"tripDetailsId", "onTripLocationId", "offTripLocationId", "ordinal", "availablePayload", "actualFuelWeight", "distance", "time", "tripName", "dispatchNotes", "fidsNotes", "pilotName", "copilotName", "transportNumber", "crewWeight", "maxGrossWeight", "aircraftBasicWeight", "type", "manualLockState", "averageFuelBurnRate", "maxCargoBayCapacity", "cancelReason", "transportType", "origin", "destination", "plannedArrivalTime", "actualArrivalTime", "plannedDepartureTime", "actualDepartureTime"}),
+    #"Changed Type" = Table.TransformColumnTypes(#"Expanded data",{{"plannedArrivalTime", type datetime}, {"actualArrivalTime", type datetime}, {"plannedDepartureTime", type datetime}, {"actualDepartureTime", type datetime}}),
+    #"Split Column by Delimiter" = Table.SplitColumn(Table.TransformColumnTypes(#"Changed Type", {{"plannedArrivalTime", type text}}, "en-US"), "plannedArrivalTime", Splitter.SplitTextByEachDelimiter({" "}, QuoteStyle.Csv, false), {"plannedArrivalTime.1", "plannedArrivalTime.2"}),
+    #"Changed Type1" = Table.TransformColumnTypes(#"Split Column by Delimiter",{{"plannedArrivalTime.1", type date}, {"plannedArrivalTime.2", type time}}),
+    #"Renamed Columns" = Table.RenameColumns(#"Changed Type1",{{"plannedArrivalTime.1", "Planned Arrival Date"}, {"plannedArrivalTime.2", "Planned Arrival Time"}})
+
+in
+    #"Renamed Columns"
+
+// Customer
+"shell" meta [IsParameterQuery=true, Type="Any", IsParameterQueryRequired=true]
+
+// Briefing Details
+let
+    HelipassAccessToken =Access_Token,
+    FirstPageUri = "https://hp-reporting-" & Customer & ".azurewebsites.net/briefingdetails" & "?access_token=" & HelipassAccessToken,
+    MaxPages = 21,
+    GetPage = (pageUri, nextFilter, dataFilter) =>        
+        let
+            Result = let
+                    PageUri = pageUri,          
+                    PageContent = Web.Contents(PageUri),
+                    Document = Json.Document(PageContent),
+                    PageData = dataFilter(Document),
+                    NextPageUri = nextFilter(Document)
+                in
+                    [ NextPageUri = NextPageUri, PageData = PageData ]
+        in
+            Result,
+            
+    GetPages = (firstPageUri, nextFilter, dataFilter) =>
+        let
+            //pump the API one page at a time, collecting a list of data tables
+            PageDataList = List.Generate(
+                () => [
+                        pageNumber = 1, 
+                        pageResult = GetPage(firstPageUri, nextFilter, dataFilter)
+                    ],
+                each [pageResult] <> null and [pageResult][PageData] <> null,
+                each [
+                        pageNumber = [pageNumber] + 1, 
+                        pageResult = 
+                            if [pageResult][NextPageUri] <> null 
+                            then GetPage([pageResult][NextPageUri], nextFilter, dataFilter)
+                            else null
+                    ],
+                each [pageResult][PageData]
+            ),
+            CombinedData = List.Combine(PageDataList)
+        in
+            CombinedData,
+    
+    LocationData = GetPages(
+         FirstPageUri,
+        (doc) => 
+            let
+                Links = try doc[links] otherwise null,
+                LinksTable = Table.FromRecords(Links),
+                NextLinksTable = Table.SelectRows(LinksTable, each [rel] = "next"),
+                NextLink = try NextLinksTable{0} otherwise null
+            in
+                try NextLink[href] otherwise null,                
+        (doc) => doc[data]
+    ),
+    LocationTable = Table.FromRecords(LocationData)
+in
+    LocationTable
+
+// Callsigns
+let
+    HelipassAccessToken =Access_Token,
+    FirstPageUri = "https://hp-reporting-" & Customer & ".azurewebsites.net/callsigns" & "?access_token=" & HelipassAccessToken & "&count=10000000",
+    MaxPages = 21,
+    GetPage = (pageUri, nextFilter, dataFilter) =>        
+        let
+            Result = let
+                    PageUri = pageUri,          
+                    PageContent = Web.Contents(PageUri),
+                    Document = Json.Document(PageContent),
+                    PageData = dataFilter(Document),
+                    NextPageUri = nextFilter(Document)
+                in
+                    [ NextPageUri = NextPageUri, PageData = PageData ]
+        in
+            Result,
+            
+    GetPages = (firstPageUri, nextFilter, dataFilter) =>
+        let
+            //pump the API one page at a time, collecting a list of data tables
+            PageDataList = List.Generate(
+                () => [
+                        pageNumber = 1, 
+                        pageResult = GetPage(firstPageUri, nextFilter, dataFilter)
+                    ],
+                each [pageResult] <> null and [pageResult][PageData] <> null,
+                each [
+                        pageNumber = [pageNumber] + 1, 
+                        pageResult = 
+                            if [pageResult][NextPageUri] <> null 
+                            then GetPage([pageResult][NextPageUri], nextFilter, dataFilter)
+                            else null
+                    ],
+                each [pageResult][PageData]
+            ),
+            CombinedData = List.Combine(PageDataList)
+        in
+            CombinedData,
+    
+    LocationData = GetPages(
+         FirstPageUri,
+        (doc) => 
+            let
+                Links = try doc[links] otherwise null,
+                LinksTable = Table.FromRecords(Links),
+                NextLinksTable = Table.SelectRows(LinksTable, each [rel] = "next"),
+                NextLink = try NextLinksTable{0} otherwise null
+            in
+                try NextLink[href] otherwise null,                
+        (doc) => doc[data]
+    ),
+    LocationTable = Table.FromRecords(LocationData),
+    #"Removed Columns" = Table.RemoveColumns(LocationTable,{"links"}),
+    #"Expanded data" = Table.ExpandRecordColumn(#"Removed Columns", "data", {"hpId", "id", "name", "transportType", "description", "maxSeats", "averageSpeed", "averageFuelBurnRate", "averageAvailablePayload", "maxCargoBayCapacity", "averageAircraftBasicWeight"}, {"hpId", "id", "name", "transportType", "description", "maxSeats", "averageSpeed", "averageFuelBurnRate", "averageAvailablePayload", "maxCargoBayCapacity", "averageAircraftBasicWeight"})
+in
+    #"Expanded data"
+
+// Cargo Checkins
+let
+    HelipassAccessToken =Access_Token,
+    FirstPageUri = "https://hp-reporting-" & Customer & ".azurewebsites.net/CARGOCHECKINS" & "?access_token=" & HelipassAccessToken & "&count=1000000000",
+    MaxPages = 21,
+    GetPage = (pageUri, nextFilter, dataFilter) =>        
+        let
+            Result = let
+                    PageUri = pageUri,          
+                    PageContent = Web.Contents(PageUri),
+                    Document = Json.Document(PageContent),
+                    PageData = dataFilter(Document),
+                    NextPageUri = nextFilter(Document)
+                in
+                    [ NextPageUri = NextPageUri, PageData = PageData ]
+        in
+            Result,
+            
+    GetPages = (firstPageUri, nextFilter, dataFilter) =>
+        let
+            //pump the API one page at a time, collecting a list of data tables
+            PageDataList = List.Generate(
+                () => [
+                        pageNumber = 1, 
+                        pageResult = GetPage(firstPageUri, nextFilter, dataFilter)
+                    ],
+                each [pageResult] <> null and [pageResult][PageData] <> null,
+                each [
+                        pageNumber = [pageNumber] + 1, 
+                        pageResult = 
+                            if [pageResult][NextPageUri] <> null 
+                            then GetPage([pageResult][NextPageUri], nextFilter, dataFilter)
+                            else null
+                    ],
+                each [pageResult][PageData]
+            ),
+            CombinedData = List.Combine(PageDataList)
+        in
+            CombinedData,
+    
+    LocationData = GetPages(
+         FirstPageUri,
+        (doc) => 
+            let
+                Links = try doc[links] otherwise null,
+                LinksTable = Table.FromRecords(Links),
+                NextLinksTable = Table.SelectRows(LinksTable, each [rel] = "next"),
+                NextLink = try NextLinksTable{0} otherwise null
+            in
+                try NextLink[href] otherwise null,                
+        (doc) => doc[data]
+    ),
+    LocationTable = Table.FromRecords(LocationData),
+    #"Removed Columns" = Table.RemoveColumns(LocationTable,{"links"}),
+    #"Expanded data" = Table.ExpandRecordColumn(#"Removed Columns", "data", {"reservationId", "orginName", "destinationName", "companyName", "description", "unNumber", "containerType", "vendor", "attention", "cargoWeight", "isHazmat", "notes", "tripDate"}, {"reservationId", "orginName", "destinationName", "companyName", "description", "unNumber", "containerType", "vendor", "attention", "cargoWeight", "isHazmat", "notes", "tripDate"})
+in
+    #"Expanded data"
+
+// Cargo Reservations
+let
+    HelipassAccessToken =Access_Token,
+    FirstPageUri = "https://hp-reporting-" & Customer & ".azurewebsites.net/CargoReservations" & "?access_token=" & HelipassAccessToken & "&count=1000000000",
+    MaxPages = 21,
+    GetPage = (pageUri, nextFilter, dataFilter) =>        
+        let
+            Result = let
+                    PageUri = pageUri,          
+                    PageContent = Web.Contents(PageUri),
+                    Document = Json.Document(PageContent),
+                    PageData = dataFilter(Document),
+                    NextPageUri = nextFilter(Document)
+                in
+                    [ NextPageUri = NextPageUri, PageData = PageData ]
+        in
+            Result,
+            
+    GetPages = (firstPageUri, nextFilter, dataFilter) =>
+        let
+            //pump the API one page at a time, collecting a list of data tables
+            PageDataList = List.Generate(
+                () => [
+                        pageNumber = 1, 
+                        pageResult = GetPage(firstPageUri, nextFilter, dataFilter)
+                    ],
+                each [pageResult] <> null and [pageResult][PageData] <> null,
+                each [
+                        pageNumber = [pageNumber] + 1, 
+                        pageResult = 
+                            if [pageResult][NextPageUri] <> null 
+                            then GetPage([pageResult][NextPageUri], nextFilter, dataFilter)
+                            else null
+                    ],
+                each [pageResult][PageData]
+            ),
+            CombinedData = List.Combine(PageDataList)
+        in
+            CombinedData,
+    
+    LocationData = GetPages(
+         FirstPageUri,
+        (doc) => 
+            let
+                Links = try doc[links] otherwise null,
+                LinksTable = Table.FromRecords(Links),
+                NextLinksTable = Table.SelectRows(LinksTable, each [rel] = "next"),
+                NextLink = try NextLinksTable{0} otherwise null
+            in
+                try NextLink[href] otherwise null,                
+        (doc) => doc[data]
+    ),
+    LocationTable = Table.FromRecords(LocationData),
+    #"Removed Columns" = Table.RemoveColumns(LocationTable,{"links"}),
+    #"Expanded data" = Table.ExpandRecordColumn(#"Removed Columns", "data", {"hpId", "id", "companyName", "vendor", "description", "isHazmat", "unNumber", "hazmatClassification", "hazmatSubclassificationCode", "containerType", "attention", "notes", "tripDate", "offLocationName", "onLocationName", "weight"}, {"hpId", "id", "companyName", "vendor", "description", "isHazmat", "unNumber", "hazmatClassification", "hazmatSubclassificationCode", "containerType", "attention", "notes", "tripDate", "offLocationName", "onLocationName", "weight"})
+in
+    #"Expanded data"
+
+// Companies
+let
+    HelipassAccessToken =Access_Token,
+    FirstPageUri = "https://hp-reporting-" & Customer & ".azurewebsites.net/Companies" & "?access_token=" & HelipassAccessToken,
+    MaxPages = 21,
+    GetPage = (pageUri, nextFilter, dataFilter) =>        
+        let
+            Result = let
+                    PageUri = pageUri,          
+                    PageContent = Web.Contents(PageUri),
+                    Document = Json.Document(PageContent),
+                    PageData = dataFilter(Document),
+                    NextPageUri = nextFilter(Document)
+                in
+                    [ NextPageUri = NextPageUri, PageData = PageData ]
+        in
+            Result,
+            
+    GetPages = (firstPageUri, nextFilter, dataFilter) =>
+        let
+            //pump the API one page at a time, collecting a list of data tables
+            PageDataList = List.Generate(
+                () => [
+                        pageNumber = 1, 
+                        pageResult = GetPage(firstPageUri, nextFilter, dataFilter)
+                    ],
+                each [pageResult] <> null and [pageResult][PageData] <> null,
+                each [
+                        pageNumber = [pageNumber] + 1, 
+                        pageResult = 
+                            if [pageResult][NextPageUri] <> null 
+                            then GetPage([pageResult][NextPageUri], nextFilter, dataFilter)
+                            else null
+                    ],
+                each [pageResult][PageData]
+            ),
+            CombinedData = List.Combine(PageDataList)
+        in
+            CombinedData,
+    
+    LocationData = GetPages(
+         FirstPageUri,
+        (doc) => 
+            let
+                Links = try doc[links] otherwise null,
+                LinksTable = Table.FromRecords(Links),
+                NextLinksTable = Table.SelectRows(LinksTable, each [rel] = "next"),
+                NextLink = try NextLinksTable{0} otherwise null
+            in
+                try NextLink[href] otherwise null,                
+        (doc) => doc[data]
+    ),
+    LocationTable = Table.FromRecords(LocationData),
+    #"Removed Columns" = Table.RemoveColumns(LocationTable,{"links"}),
+    #"Expanded data" = Table.ExpandRecordColumn(#"Removed Columns", "data", {"hpId", "id", "name", "primaryContact", "primaryPhoneNumber", "primaryEmail", "secondaryContact", "secondaryPhoneNumber", "secondaryEmail", "isn", "isActive"}, {"hpId", "id", "name", "primaryContact", "primaryPhoneNumber", "primaryEmail", "secondaryContact", "secondaryPhoneNumber", "secondaryEmail", "isn", "isActive"}),
+    #"Filtered Rows" = Table.SelectRows(#"Expanded data", each [name] <> null and [name] <> "")
+in
+    #"Filtered Rows"
+
+// Cost Codes
+let
+    HelipassAccessToken =Access_Token,
+    FirstPageUri = "https://hp-reporting-" & Customer & ".azurewebsites.net/CostCodes" & "?access_token=" & HelipassAccessToken,
+    MaxPages = 21,
+    GetPage = (pageUri, nextFilter, dataFilter) =>        
+        let
+            Result = let
+                    PageUri = pageUri,          
+                    PageContent = Web.Contents(PageUri),
+                    Document = Json.Document(PageContent),
+                    PageData = dataFilter(Document),
+                    NextPageUri = nextFilter(Document)
+                in
+                    [ NextPageUri = NextPageUri, PageData = PageData ]
+        in
+            Result,
+            
+    GetPages = (firstPageUri, nextFilter, dataFilter) =>
+        let
+            //pump the API one page at a time, collecting a list of data tables
+            PageDataList = List.Generate(
+                () => [
+                        pageNumber = 1, 
+                        pageResult = GetPage(firstPageUri, nextFilter, dataFilter)
+                    ],
+                each [pageResult] <> null and [pageResult][PageData] <> null,
+                each [
+                        pageNumber = [pageNumber] + 1, 
+                        pageResult = 
+                            if [pageResult][NextPageUri] <> null 
+                            then GetPage([pageResult][NextPageUri], nextFilter, dataFilter)
+                            else null
+                    ],
+                each [pageResult][PageData]
+            ),
+            CombinedData = List.Combine(PageDataList)
+        in
+            CombinedData,
+    
+    LocationData = GetPages(
+         FirstPageUri,
+        (doc) => 
+            let
+                Links = try doc[links] otherwise null,
+                LinksTable = Table.FromRecords(Links),
+                NextLinksTable = Table.SelectRows(LinksTable, each [rel] = "next"),
+                NextLink = try NextLinksTable{0} otherwise null
+            in
+                try NextLink[href] otherwise null,                
+        (doc) => doc[data]
+    ),
+    LocationTable = Table.FromRecords(LocationData),
+    #"Removed Columns" = Table.RemoveColumns(LocationTable,{"links"}),
+    #"Expanded data" = Table.ExpandRecordColumn(#"Removed Columns", "data", {"id", "name", "category", "description", "isAllocationCostCode", "isActive"}, {"id", "name", "category", "description", "isAllocationCostCode", "isActive"}),
+    #"Filtered Rows" = Table.SelectRows(#"Expanded data", each [name] <> null and [name] <> "")
+in
+    #"Filtered Rows"
+
+// Courses
+let
+    HelipassAccessToken =Access_Token,
+    FirstPageUri = "https://hp-reporting-" & Customer & ".azurewebsites.net/courses" & "?access_token=" & HelipassAccessToken,
+    MaxPages = 21,
+    GetPage = (pageUri, nextFilter, dataFilter) =>        
+        let
+            Result = let
+                    PageUri = pageUri,          
+                    PageContent = Web.Contents(PageUri),
+                    Document = Json.Document(PageContent),
+                    PageData = dataFilter(Document),
+                    NextPageUri = nextFilter(Document)
+                in
+                    [ NextPageUri = NextPageUri, PageData = PageData ]
+        in
+            Result,
+            
+    GetPages = (firstPageUri, nextFilter, dataFilter) =>
+        let
+            //pump the API one page at a time, collecting a list of data tables
+            PageDataList = List.Generate(
+                () => [
+                        pageNumber = 1, 
+                        pageResult = GetPage(firstPageUri, nextFilter, dataFilter)
+                    ],
+                each [pageResult] <> null and [pageResult][PageData] <> null,
+                each [
+                        pageNumber = [pageNumber] + 1, 
+                        pageResult = 
+                            if [pageResult][NextPageUri] <> null 
+                            then GetPage([pageResult][NextPageUri], nextFilter, dataFilter)
+                            else null
+                    ],
+                each [pageResult][PageData]
+            ),
+            CombinedData = List.Combine(PageDataList)
+        in
+            CombinedData,
+    
+    LocationData = GetPages(
+         FirstPageUri,
+        (doc) => 
+            let
+                Links = try doc[links] otherwise null,
+                LinksTable = Table.FromRecords(Links),
+                NextLinksTable = Table.SelectRows(LinksTable, each [rel] = "next"),
+                NextLink = try NextLinksTable{0} otherwise null
+            in
+                try NextLink[href] otherwise null,                
+        (doc) => doc[data]
+    ),
+    LocationTable = Table.FromRecords(LocationData),
+    #"Removed Columns" = Table.RemoveColumns(LocationTable,{"links"}),
+    #"Expanded data" = Table.ExpandRecordColumn(#"Removed Columns", "data", {"hpId", "id", "code", "name", "requiresExpirationDate", "requiresIssueDate", "requiresProider"}, {"hpId", "id", "code", "name", "requiresExpirationDate", "requiresIssueDate", "requiresProider"}),
+    #"Filtered Rows" = Table.SelectRows(#"Expanded data", each [code] <> null and [code] <> "")
+in
+    #"Filtered Rows"
+
+// Crews
+let
+    HelipassAccessToken =Access_Token,
+    FirstPageUri = "https://hp-reporting-" & Customer & ".azurewebsites.net/crews" & "?access_token=" & HelipassAccessToken & "&count=1000000",
+    MaxPages = 21,
+    GetPage = (pageUri, nextFilter, dataFilter) =>        
+        let
+            Result = let
+                    PageUri = pageUri,          
+                    PageContent = Web.Contents(PageUri),
+                    Document = Json.Document(PageContent),
+                    PageData = dataFilter(Document),
+                    NextPageUri = nextFilter(Document)
+                in
+                    [ NextPageUri = NextPageUri, PageData = PageData ]
+        in
+            Result,
+            
+    GetPages = (firstPageUri, nextFilter, dataFilter) =>
+        let
+            //pump the API one page at a time, collecting a list of data tables
+            PageDataList = List.Generate(
+                () => [
+                        pageNumber = 1, 
+                        pageResult = GetPage(firstPageUri, nextFilter, dataFilter)
+                    ],
+                each [pageResult] <> null and [pageResult][PageData] <> null,
+                each [
+                        pageNumber = [pageNumber] + 1, 
+                        pageResult = 
+                            if [pageResult][NextPageUri] <> null 
+                            then GetPage([pageResult][NextPageUri], nextFilter, dataFilter)
+                            else null
+                    ],
+                each [pageResult][PageData]
+            ),
+            CombinedData = List.Combine(PageDataList)
+        in
+            CombinedData,
+    
+    LocationData = GetPages(
+         FirstPageUri,
+        (doc) => 
+            let
+                Links = try doc[links] otherwise null,
+                LinksTable = Table.FromRecords(Links),
+                NextLinksTable = Table.SelectRows(LinksTable, each [rel] = "next"),
+                NextLink = try NextLinksTable{0} otherwise null
+            in
+                try NextLink[href] otherwise null,                
+        (doc) => doc[data]
+    ),
+    LocationTable = Table.FromRecords(LocationData),
+    #"Removed Columns" = Table.RemoveColumns(LocationTable,{"links"}),
+    #"Expanded data" = Table.ExpandRecordColumn(#"Removed Columns", "data", {"hpId", "id", "locationId", "locationName", "personnelCount", "name", "description", "notes", "scheduleRotation", "scheduleNumber", "startDate", "endDate", "isActive", "status"}, {"hpId", "id", "locationId", "locationName", "personnelCount", "name", "description", "notes", "scheduleRotation", "scheduleNumber", "startDate", "endDate", "isActive", "status"})
+in
+    #"Expanded data"
+
+// Drug Screen Records
+let
+    HelipassAccessToken =Access_Token,
+    FirstPageUri = "https://hp-reporting-" & Customer & ".azurewebsites.net/drugscreenrecords" & "?access_token=" & HelipassAccessToken,
+    MaxPages = 21,
+    GetPage = (pageUri, nextFilter, dataFilter) =>        
+        let
+            Result = let
+                    PageUri = pageUri,          
+                    PageContent = Web.Contents(PageUri),
+                    Document = Json.Document(PageContent),
+                    PageData = dataFilter(Document),
+                    NextPageUri = nextFilter(Document)
+                in
+                    [ NextPageUri = NextPageUri, PageData = PageData ]
+        in
+            Result,
+            
+    GetPages = (firstPageUri, nextFilter, dataFilter) =>
+        let
+            //pump the API one page at a time, collecting a list of data tables
+            PageDataList = List.Generate(
+                () => [
+                        pageNumber = 1, 
+                        pageResult = GetPage(firstPageUri, nextFilter, dataFilter)
+                    ],
+                each [pageResult] <> null and [pageResult][PageData] <> null,
+                each [
+                        pageNumber = [pageNumber] + 1, 
+                        pageResult = 
+                            if [pageResult][NextPageUri] <> null 
+                            then GetPage([pageResult][NextPageUri], nextFilter, dataFilter)
+                            else null
+                    ],
+                each [pageResult][PageData]
+            ),
+            CombinedData = List.Combine(PageDataList)
+        in
+            CombinedData,
+    
+    LocationData = GetPages(
+         FirstPageUri,
+        (doc) => 
+            let
+                Links = try doc[links] otherwise null,
+                LinksTable = Table.FromRecords(Links),
+                NextLinksTable = Table.SelectRows(LinksTable, each [rel] = "next"),
+                NextLink = try NextLinksTable{0} otherwise null
+            in
+                try NextLink[href] otherwise null,                
+        (doc) => doc[data]
+    ),
+    LocationTable = Table.FromRecords(LocationData),
+    #"Removed Columns" = Table.RemoveColumns(LocationTable,{"links"})
+in
+    #"Removed Columns"
+
+// Drug Screen Slots
+let
+    HelipassAccessToken =Access_Token,
+    FirstPageUri = "https://hp-reporting-" & Customer & ".azurewebsites.net/drugscreenslots" & "?access_token=" & HelipassAccessToken,
+    MaxPages = 21,
+    GetPage = (pageUri, nextFilter, dataFilter) =>        
+        let
+            Result = let
+                    PageUri = pageUri,          
+                    PageContent = Web.Contents(PageUri),
+                    Document = Json.Document(PageContent),
+                    PageData = dataFilter(Document),
+                    NextPageUri = nextFilter(Document)
+                in
+                    [ NextPageUri = NextPageUri, PageData = PageData ]
+        in
+            Result,
+            
+    GetPages = (firstPageUri, nextFilter, dataFilter) =>
+        let
+            //pump the API one page at a time, collecting a list of data tables
+            PageDataList = List.Generate(
+                () => [
+                        pageNumber = 1, 
+                        pageResult = GetPage(firstPageUri, nextFilter, dataFilter)
+                    ],
+                each [pageResult] <> null and [pageResult][PageData] <> null,
+                each [
+                        pageNumber = [pageNumber] + 1, 
+                        pageResult = 
+                            if [pageResult][NextPageUri] <> null 
+                            then GetPage([pageResult][NextPageUri], nextFilter, dataFilter)
+                            else null
+                    ],
+                each [pageResult][PageData]
+            ),
+            CombinedData = List.Combine(PageDataList)
+        in
+            CombinedData,
+    
+    LocationData = GetPages(
+         FirstPageUri,
+        (doc) => 
+            let
+                Links = try doc[links] otherwise null,
+                LinksTable = Table.FromRecords(Links),
+                NextLinksTable = Table.SelectRows(LinksTable, each [rel] = "next"),
+                NextLink = try NextLinksTable{0} otherwise null
+            in
+                try NextLink[href] otherwise null,                
+        (doc) => doc[data]
+    ),
+    LocationTable = Table.FromRecords(LocationData),
+    #"Removed Columns" = Table.RemoveColumns(LocationTable,{"links"})
+in
+    #"Removed Columns"
+
+// Recurring Drug Screens
+let
+    HelipassAccessToken =Access_Token,
+    FirstPageUri = "https://hp-reporting-" & Customer & ".azurewebsites.net/recurringdrugscreens" & "?access_token=" & HelipassAccessToken,
+    MaxPages = 21,
+    GetPage = (pageUri, nextFilter, dataFilter) =>        
+        let
+            Result = let
+                    PageUri = pageUri,          
+                    PageContent = Web.Contents(PageUri),
+                    Document = Json.Document(PageContent),
+                    PageData = dataFilter(Document),
+                    NextPageUri = nextFilter(Document)
+                in
+                    [ NextPageUri = NextPageUri, PageData = PageData ]
+        in
+            Result,
+            
+    GetPages = (firstPageUri, nextFilter, dataFilter) =>
+        let
+            //pump the API one page at a time, collecting a list of data tables
+            PageDataList = List.Generate(
+                () => [
+                        pageNumber = 1, 
+                        pageResult = GetPage(firstPageUri, nextFilter, dataFilter)
+                    ],
+                each [pageResult] <> null and [pageResult][PageData] <> null,
+                each [
+                        pageNumber = [pageNumber] + 1, 
+                        pageResult = 
+                            if [pageResult][NextPageUri] <> null 
+                            then GetPage([pageResult][NextPageUri], nextFilter, dataFilter)
+                            else null
+                    ],
+                each [pageResult][PageData]
+            ),
+            CombinedData = List.Combine(PageDataList)
+        in
+            CombinedData,
+    
+    LocationData = GetPages(
+         FirstPageUri,
+        (doc) => 
+            let
+                Links = try doc[links] otherwise null,
+                LinksTable = Table.FromRecords(Links),
+                NextLinksTable = Table.SelectRows(LinksTable, each [rel] = "next"),
+                NextLink = try NextLinksTable{0} otherwise null
+            in
+                try NextLink[href] otherwise null,                
+        (doc) => doc[data]
+    ),
+    LocationTable = Table.FromRecords(LocationData),
+    #"Removed Columns" = Table.RemoveColumns(LocationTable,{"links"})
+in
+    #"Removed Columns"
+
+// Invoices
+let
+    HelipassAccessToken =Access_Token,
+    FirstPageUri = "https://hp-reporting-" & Customer & ".azurewebsites.net/invoices" & "?access_token=" & HelipassAccessToken,
+    MaxPages = 21,
+    GetPage = (pageUri, nextFilter, dataFilter) =>        
+        let
+            Result = let
+                    PageUri = pageUri,          
+                    PageContent = Web.Contents(PageUri),
+                    Document = Json.Document(PageContent),
+                    PageData = dataFilter(Document),
+                    NextPageUri = nextFilter(Document)
+                in
+                    [ NextPageUri = NextPageUri, PageData = PageData ]
+        in
+            Result,
+            
+    GetPages = (firstPageUri, nextFilter, dataFilter) =>
+        let
+            //pump the API one page at a time, collecting a list of data tables
+            PageDataList = List.Generate(
+                () => [
+                        pageNumber = 1, 
+                        pageResult = GetPage(firstPageUri, nextFilter, dataFilter)
+                    ],
+                each [pageResult] <> null and [pageResult][PageData] <> null,
+                each [
+                        pageNumber = [pageNumber] + 1, 
+                        pageResult = 
+                            if [pageResult][NextPageUri] <> null 
+                            then GetPage([pageResult][NextPageUri], nextFilter, dataFilter)
+                            else null
+                    ],
+                each [pageResult][PageData]
+            ),
+            CombinedData = List.Combine(PageDataList)
+        in
+            CombinedData,
+    
+    LocationData = GetPages(
+         FirstPageUri,
+        (doc) => 
+            let
+                Links = try doc[links] otherwise null,
+                LinksTable = Table.FromRecords(Links),
+                NextLinksTable = Table.SelectRows(LinksTable, each [rel] = "next"),
+                NextLink = try NextLinksTable{0} otherwise null
+            in
+                try NextLink[href] otherwise null,                
+        (doc) => doc[data]
+    ),
+    LocationTable = Table.FromRecords(LocationData),
+    #"Removed Columns" = Table.RemoveColumns(LocationTable,{"links"}),
+    #"Expanded data" = Table.ExpandRecordColumn(#"Removed Columns", "data", {"hpId", "id", "batchId", "callsign", "provider", "number", "status", "type", "lineDescription", "lineValue", "lineNotes", "isNotes", "isTransportSpecific", "isHeader", "transportRegNo", "invoiceDate", "allocationStartDate", "allocationEndDate", "createdDate", "notes"}, {"hpId", "id", "batchId", "callsign", "provider", "number", "status", "type", "lineDescription", "lineValue", "lineNotes", "isNotes", "isTransportSpecific", "isHeader", "transportRegNo", "invoiceDate", "allocationStartDate", "allocationEndDate", "createdDate", "notes"})
+in
+    #"Expanded data"
+
+// Batches
+let
+    HelipassAccessToken =Access_Token,
+    FirstPageUri = "https://hp-reporting-" & Customer & ".azurewebsites.net/batches" & "?access_token=" & HelipassAccessToken,
+    MaxPages = 21,
+    GetPage = (pageUri, nextFilter, dataFilter) =>        
+        let
+            Result = let
+                    PageUri = pageUri,          
+                    PageContent = Web.Contents(PageUri),
+                    Document = Json.Document(PageContent),
+                    PageData = dataFilter(Document),
+                    NextPageUri = nextFilter(Document)
+                in
+                    [ NextPageUri = NextPageUri, PageData = PageData ]
+        in
+            Result,
+            
+    GetPages = (firstPageUri, nextFilter, dataFilter) =>
+        let
+            //pump the API one page at a time, collecting a list of data tables
+            PageDataList = List.Generate(
+                () => [
+                        pageNumber = 1, 
+                        pageResult = GetPage(firstPageUri, nextFilter, dataFilter)
+                    ],
+                each [pageResult] <> null and [pageResult][PageData] <> null,
+                each [
+                        pageNumber = [pageNumber] + 1, 
+                        pageResult = 
+                            if [pageResult][NextPageUri] <> null 
+                            then GetPage([pageResult][NextPageUri], nextFilter, dataFilter)
+                            else null
+                    ],
+                each [pageResult][PageData]
+            ),
+            CombinedData = List.Combine(PageDataList)
+        in
+            CombinedData,
+    
+    LocationData = GetPages(
+         FirstPageUri,
+        (doc) => 
+            let
+                Links = try doc[links] otherwise null,
+                LinksTable = Table.FromRecords(Links),
+                NextLinksTable = Table.SelectRows(LinksTable, each [rel] = "next"),
+                NextLink = try NextLinksTable{0} otherwise null
+            in
+                try NextLink[href] otherwise null,                
+        (doc) => doc[data]
+    ),
+    LocationTable = Table.FromRecords(LocationData),
+    #"Removed Columns" = Table.RemoveColumns(LocationTable,{"links"}),
+    #"Expanded data" = Table.ExpandRecordColumn(#"Removed Columns", "data", {"hpId", "id", "startDate", "endDate", "status", "invoiceCount", "totalCost", "description", "notes"}, {"hpId", "id", "startDate", "endDate", "status", "invoiceCount", "totalCost", "description", "notes"})
+in
+    #"Expanded data"
+
+// Future Waivers
+let
+    HelipassAccessToken =Access_Token,
+    FirstPageUri = "https://hp-reporting-" & Customer & ".azurewebsites.net/FutureWaivers" & "?access_token=" & HelipassAccessToken,
+    MaxPages = 21,
+    GetPage = (pageUri, nextFilter, dataFilter) =>        
+        let
+            Result = let
+                    PageUri = pageUri,          
+                    PageContent = Web.Contents(PageUri),
+                    Document = Json.Document(PageContent),
+                    PageData = dataFilter(Document),
+                    NextPageUri = nextFilter(Document)
+                in
+                    [ NextPageUri = NextPageUri, PageData = PageData ]
+        in
+            Result,
+            
+    GetPages = (firstPageUri, nextFilter, dataFilter) =>
+        let
+            //pump the API one page at a time, collecting a list of data tables
+            PageDataList = List.Generate(
+                () => [
+                        pageNumber = 1, 
+                        pageResult = GetPage(firstPageUri, nextFilter, dataFilter)
+                    ],
+                each [pageResult] <> null and [pageResult][PageData] <> null,
+                each [
+                        pageNumber = [pageNumber] + 1, 
+                        pageResult = 
+                            if [pageResult][NextPageUri] <> null 
+                            then GetPage([pageResult][NextPageUri], nextFilter, dataFilter)
+                            else null
+                    ],
+                each [pageResult][PageData]
+            ),
+            CombinedData = List.Combine(PageDataList)
+        in
+            CombinedData,
+    
+    LocationData = GetPages(
+         FirstPageUri,
+        (doc) => 
+            let
+                Links = try doc[links] otherwise null,
+                LinksTable = Table.FromRecords(Links),
+                NextLinksTable = Table.SelectRows(LinksTable, each [rel] = "next"),
+                NextLink = try NextLinksTable{0} otherwise null
+            in
+                try NextLink[href] otherwise null,                
+        (doc) => doc[data]
+    ),
+    LocationTable = Table.FromRecords(LocationData)
+in
+    LocationTable
+
+// Locations
+let
+    HelipassAccessToken =Access_Token,
+    FirstPageUri = "https://hp-reporting-" & Customer & ".azurewebsites.net/Locations" & "?access_token=" & HelipassAccessToken,
+    MaxPages = 21,
+    GetPage = (pageUri, nextFilter, dataFilter) =>        
+        let
+            Result = let
+                    PageUri = pageUri,          
+                    PageContent = Web.Contents(PageUri),
+                    Document = Json.Document(PageContent),
+                    PageData = dataFilter(Document),
+                    NextPageUri = nextFilter(Document)
+                in
+                    [ NextPageUri = NextPageUri, PageData = PageData ]
+        in
+            Result,
+            
+    GetPages = (firstPageUri, nextFilter, dataFilter) =>
+        let
+            //pump the API one page at a time, collecting a list of data tables
+            PageDataList = List.Generate(
+                () => [
+                        pageNumber = 1, 
+                        pageResult = GetPage(firstPageUri, nextFilter, dataFilter)
+                    ],
+                each [pageResult] <> null and [pageResult][PageData] <> null,
+                each [
+                        pageNumber = [pageNumber] + 1, 
+                        pageResult = 
+                            if [pageResult][NextPageUri] <> null 
+                            then GetPage([pageResult][NextPageUri], nextFilter, dataFilter)
+                            else null
+                    ],
+                each [pageResult][PageData]
+            ),
+            CombinedData = List.Combine(PageDataList)
+        in
+            CombinedData,
+    
+    LocationData = GetPages(
+         FirstPageUri,
+        (doc) => 
+            let
+                Links = try doc[links] otherwise null,
+                LinksTable = Table.FromRecords(Links),
+                NextLinksTable = Table.SelectRows(LinksTable, each [rel] = "next"),
+                NextLink = try NextLinksTable{0} otherwise null
+            in
+                try NextLink[href] otherwise null,                
+        (doc) => doc[data]
+    ),
+    LocationTable = Table.FromRecords(LocationData),
+    #"Removed Columns" = Table.RemoveColumns(LocationTable,{"links"}),
+    #"Expanded data" = Table.ExpandRecordColumn(#"Removed Columns", "data", {"locationId", "primaryLocationId", "name", "state", "zip", "countryCode", "province", "primaryPhone", "primaryContact", "secondaryPhone", "secondaryContact", "baseCode", "nickName", "notes", "radioFrequency", "leaseNumber", "sml", "hasFuel", "isManned", "weightSupported", "musterPointsNum", "bagTagColor", "hasHelipad", "helipadSizeId", "isActive", "leaseAreaId", "blockNoId", "structureId", "locationStatusId", "regionId", "areaId", "isOffShore", "bedCount", "lifeCraft", "hasBoatAccess", "isPrimary", "businessUnitId", "faxNum", "isMobile", "iLogId", "twicRequired", "costCode", "isServicePort", "wasServicePort", "timeZone", "overFifty", "maxPersonnel", "bagScreeningEnabled", "marsecLevel", "trackPersonnel"}, {"locationId", "primaryLocationId", "name", "state", "zip", "countryCode", "province", "primaryPhone", "primaryContact", "secondaryPhone", "secondaryContact", "baseCode", "nickName", "notes", "radioFrequency", "leaseNumber", "sml", "hasFuel", "isManned", "weightSupported", "musterPointsNum", "bagTagColor", "hasHelipad", "helipadSizeId", "isActive", "leaseAreaId", "blockNoId", "structureId", "locationStatusId", "regionId", "areaId", "isOffShore", "bedCount", "lifeCraft", "hasBoatAccess", "isPrimary", "businessUnitId", "faxNum", "isMobile", "iLogId", "twicRequired", "costCode", "isServicePort", "wasServicePort", "timeZone", "overFifty", "maxPersonnel", "bagScreeningEnabled", "marsecLevel", "trackPersonnel"}),
+    #"Filtered Rows" = Table.SelectRows(#"Expanded data", each [name] <> null and [name] <> "")
+in
+    #"Filtered Rows"
+
+// Passenger Checkins
+let
+    HelipassAccessToken =Access_Token,
+    FirstPageUri = "https://hp-reporting-" & Customer & ".azurewebsites.net/PassengerCheckins" & "?access_token=" & HelipassAccessToken & "&count=10000000",
+    MaxPages = 21,
+    GetPage = (pageUri, nextFilter, dataFilter) =>        
+        let
+            Result = let
+                    PageUri = pageUri,          
+                    PageContent = Web.Contents(PageUri),
+                    Document = Json.Document(PageContent),
+                    PageData = dataFilter(Document),
+                    NextPageUri = nextFilter(Document)
+                in
+                    [ NextPageUri = NextPageUri, PageData = PageData ]
+        in
+            Result,
+            
+    GetPages = (firstPageUri, nextFilter, dataFilter) =>
+        let
+            //pump the API one page at a time, collecting a list of data tables
+            PageDataList = List.Generate(
+                () => [
+                        pageNumber = 1, 
+                        pageResult = GetPage(firstPageUri, nextFilter, dataFilter)
+                    ],
+                each [pageResult] <> null and [pageResult][PageData] <> null,
+                each [
+                        pageNumber = [pageNumber] + 1, 
+                        pageResult = 
+                            if [pageResult][NextPageUri] <> null 
+                            then GetPage([pageResult][NextPageUri], nextFilter, dataFilter)
+                            else null
+                    ],
+                each [pageResult][PageData]
+            ),
+            CombinedData = List.Combine(PageDataList)
+        in
+            CombinedData,
+    
+    LocationData = GetPages(
+         FirstPageUri,
+        (doc) => 
+            let
+                Links = try doc[links] otherwise null,
+                LinksTable = Table.FromRecords(Links),
+                NextLinksTable = Table.SelectRows(LinksTable, each [rel] = "next"),
+                NextLink = try NextLinksTable{0} otherwise null
+            in
+                try NextLink[href] otherwise null,                
+        (doc) => doc[data]
+    ),
+    LocationTable = Table.FromRecords(LocationData),
+    #"Removed Columns" = Table.RemoveColumns(LocationTable,{"links"})
+in
+    #"Removed Columns"
+
+// Passenger Reservations
+let
+    HelipassAccessToken =Access_Token,
+    FirstPageUri = "https://hp-reporting-" & Customer & ".azurewebsites.net/PassengerReservations" & "?access_token=" & HelipassAccessToken & "&count=1000000",
+    MaxPages = 21,
+    GetPage = (pageUri, nextFilter, dataFilter) =>        
+        let
+            Result = let
+                    PageUri = pageUri,          
+                    PageContent = Web.Contents(PageUri),
+                    Document = Json.Document(PageContent),
+                    PageData = dataFilter(Document),
+                    NextPageUri = nextFilter(Document)
+                in
+                    [ NextPageUri = NextPageUri, PageData = PageData ]
+        in
+            Result,
+            
+    GetPages = (firstPageUri, nextFilter, dataFilter) =>
+        let
+            //pump the API one page at a time, collecting a list of data tables
+            PageDataList = List.Generate(
+                () => [
+                        pageNumber = 1, 
+                        pageResult = GetPage(firstPageUri, nextFilter, dataFilter)
+                    ],
+                each [pageResult] <> null and [pageResult][PageData] <> null,
+                each [
+                        pageNumber = [pageNumber] + 1, 
+                        pageResult = 
+                            if [pageResult][NextPageUri] <> null 
+                            then GetPage([pageResult][NextPageUri], nextFilter, dataFilter)
+                            else null
+                    ],
+                each [pageResult][PageData]
+            ),
+            CombinedData = List.Combine(PageDataList)
+        in
+            CombinedData,
+    
+    LocationData = GetPages(
+         FirstPageUri,
+        (doc) => 
+            let
+                Links = try doc[links] otherwise null,
+                LinksTable = Table.FromRecords(Links),
+                NextLinksTable = Table.SelectRows(LinksTable, each [rel] = "next"),
+                NextLink = try NextLinksTable{0} otherwise null
+            in
+                try NextLink[href] otherwise null,                
+        (doc) => doc[data]
+    ),
+    LocationTable = Table.FromRecords(LocationData),
+    #"Removed Columns" = Table.RemoveColumns(LocationTable,{"links"})
+in
+    #"Removed Columns"
+
+// Passengers
+let
+    HelipassAccessToken =Access_Token,
+    FirstPageUri = "https://hp-reporting-" & Customer & ".azurewebsites.net/passengers" & "?access_token=" & HelipassAccessToken & "&count=1000000",
+    MaxPages = 21,
+    GetPage = (pageUri, nextFilter, dataFilter) =>        
+        let
+            Result = let
+                    PageUri = pageUri,          
+                    PageContent = Web.Contents(PageUri),
+                    Document = Json.Document(PageContent),
+                    PageData = dataFilter(Document),
+                    NextPageUri = nextFilter(Document)
+                in
+                    [ NextPageUri = NextPageUri, PageData = PageData ]
+        in
+            Result,
+            
+    GetPages = (firstPageUri, nextFilter, dataFilter) =>
+        let
+            //pump the API one page at a time, collecting a list of data tables
+            PageDataList = List.Generate(
+                () => [
+                        pageNumber = 1, 
+                        pageResult = GetPage(firstPageUri, nextFilter, dataFilter)
+                    ],
+                each [pageResult] <> null and [pageResult][PageData] <> null,
+                each [
+                        pageNumber = [pageNumber] + 1, 
+                        pageResult = 
+                            if [pageResult][NextPageUri] <> null 
+                            then GetPage([pageResult][NextPageUri], nextFilter, dataFilter)
+                            else null
+                    ],
+                each [pageResult][PageData]
+            ),
+            CombinedData = List.Combine(PageDataList)
+        in
+            CombinedData,
+    
+    LocationData = GetPages(
+         FirstPageUri,
+        (doc) => 
+            let
+                Links = try doc[links] otherwise null,
+                LinksTable = Table.FromRecords(Links),
+                NextLinksTable = Table.SelectRows(LinksTable, each [rel] = "next"),
+                NextLink = try NextLinksTable{0} otherwise null
+            in
+                try NextLink[href] otherwise null,                
+        (doc) => doc[data]
+    ),
+    LocationTable = Table.FromRecords(LocationData),
+    #"Removed Columns" = Table.RemoveColumns(LocationTable,{"links"})
+in
+    #"Removed Columns"
+
+// POB
+let
+    HelipassAccessToken =Access_Token,
+    FirstPageUri = "https://hp-reporting-" & Customer & ".azurewebsites.net/pobs" & "?access_token=" & HelipassAccessToken & "&count=1000000",
+    MaxPages = 21,
+    GetPage = (pageUri, nextFilter, dataFilter) =>        
+        let
+            Result = let
+                    PageUri = pageUri,          
+                    PageContent = Web.Contents(PageUri),
+                    Document = Json.Document(PageContent),
+                    PageData = dataFilter(Document),
+                    NextPageUri = nextFilter(Document)
+                in
+                    [ NextPageUri = NextPageUri, PageData = PageData ]
+        in
+            Result,
+            
+    GetPages = (firstPageUri, nextFilter, dataFilter) =>
+        let
+            //pump the API one page at a time, collecting a list of data tables
+            PageDataList = List.Generate(
+                () => [
+                        pageNumber = 1, 
+                        pageResult = GetPage(firstPageUri, nextFilter, dataFilter)
+                    ],
+                each [pageResult] <> null and [pageResult][PageData] <> null,
+                each [
+                        pageNumber = [pageNumber] + 1, 
+                        pageResult = 
+                            if [pageResult][NextPageUri] <> null 
+                            then GetPage([pageResult][NextPageUri], nextFilter, dataFilter)
+                            else null
+                    ],
+                each [pageResult][PageData]
+            ),
+            CombinedData = List.Combine(PageDataList)
+        in
+            CombinedData,
+    
+    LocationData = GetPages(
+         FirstPageUri,
+        (doc) => 
+            let
+                Links = try doc[links] otherwise null,
+                LinksTable = Table.FromRecords(Links),
+                NextLinksTable = Table.SelectRows(LinksTable, each [rel] = "next"),
+                NextLink = try NextLinksTable{0} otherwise null
+            in
+                try NextLink[href] otherwise null,                
+        (doc) => doc[data]
+    ),
+    LocationTable = Table.FromRecords(LocationData)
+in
+    LocationTable
+
+// Providers
+let
+    HelipassAccessToken =Access_Token,
+    FirstPageUri = "https://hp-reporting-" & Customer & ".azurewebsites.net/providers" & "?access_token=" & HelipassAccessToken,
+    MaxPages = 21,
+    GetPage = (pageUri, nextFilter, dataFilter) =>        
+        let
+            Result = let
+                    PageUri = pageUri,          
+                    PageContent = Web.Contents(PageUri),
+                    Document = Json.Document(PageContent),
+                    PageData = dataFilter(Document),
+                    NextPageUri = nextFilter(Document)
+                in
+                    [ NextPageUri = NextPageUri, PageData = PageData ]
+        in
+            Result,
+            
+    GetPages = (firstPageUri, nextFilter, dataFilter) =>
+        let
+            //pump the API one page at a time, collecting a list of data tables
+            PageDataList = List.Generate(
+                () => [
+                        pageNumber = 1, 
+                        pageResult = GetPage(firstPageUri, nextFilter, dataFilter)
+                    ],
+                each [pageResult] <> null and [pageResult][PageData] <> null,
+                each [
+                        pageNumber = [pageNumber] + 1, 
+                        pageResult = 
+                            if [pageResult][NextPageUri] <> null 
+                            then GetPage([pageResult][NextPageUri], nextFilter, dataFilter)
+                            else null
+                    ],
+                each [pageResult][PageData]
+            ),
+            CombinedData = List.Combine(PageDataList)
+        in
+            CombinedData,
+    
+    LocationData = GetPages(
+         FirstPageUri,
+        (doc) => 
+            let
+                Links = try doc[links] otherwise null,
+                LinksTable = Table.FromRecords(Links),
+                NextLinksTable = Table.SelectRows(LinksTable, each [rel] = "next"),
+                NextLink = try NextLinksTable{0} otherwise null
+            in
+                try NextLink[href] otherwise null,                
+        (doc) => doc[data]
+    ),
+    LocationTable = Table.FromRecords(LocationData),
+    #"Removed Columns" = Table.RemoveColumns(LocationTable,{"links"}),
+    #"Expanded data" = Table.ExpandRecordColumn(#"Removed Columns", "data", {"hpId", "id", "name", "description", "isActive"}, {"hpId", "id", "name", "description", "isActive"}),
+    #"Filtered Rows" = Table.SelectRows(#"Expanded data", each [name] <> null and [name] <> "")
+in
+    #"Filtered Rows"
+
+// Requests
+let
+    HelipassAccessToken =Access_Token,
+    FirstPageUri = "https://hp-reporting-" & Customer & ".azurewebsites.net/requests" & "?access_token=" & HelipassAccessToken,
+    MaxPages = 21,
+    GetPage = (pageUri, nextFilter, dataFilter) =>        
+        let
+            Result = let
+                    PageUri = pageUri,          
+                    PageContent = Web.Contents(PageUri),
+                    Document = Json.Document(PageContent),
+                    PageData = dataFilter(Document),
+                    NextPageUri = nextFilter(Document)
+                in
+                    [ NextPageUri = NextPageUri, PageData = PageData ]
+        in
+            Result,
+            
+    GetPages = (firstPageUri, nextFilter, dataFilter) =>
+        let
+            //pump the API one page at a time, collecting a list of data tables
+            PageDataList = List.Generate(
+                () => [
+                        pageNumber = 1, 
+                        pageResult = GetPage(firstPageUri, nextFilter, dataFilter)
+                    ],
+                each [pageResult] <> null and [pageResult][PageData] <> null,
+                each [
+                        pageNumber = [pageNumber] + 1, 
+                        pageResult = 
+                            if [pageResult][NextPageUri] <> null 
+                            then GetPage([pageResult][NextPageUri], nextFilter, dataFilter)
+                            else null
+                    ],
+                each [pageResult][PageData]
+            ),
+            CombinedData = List.Combine(PageDataList)
+        in
+            CombinedData,
+    
+    LocationData = GetPages(
+         FirstPageUri,
+        (doc) => 
+            let
+                Links = try doc[links] otherwise null,
+                LinksTable = Table.FromRecords(Links),
+                NextLinksTable = Table.SelectRows(LinksTable, each [rel] = "next"),
+                NextLink = try NextLinksTable{0} otherwise null
+            in
+                try NextLink[href] otherwise null,                
+        (doc) => doc[data]
+    ),
+    LocationTable = Table.FromRecords(LocationData),
+    #"Removed Columns" = Table.RemoveColumns(LocationTable,{"links"}),
+    #"Expanded data" = Table.ExpandRecordColumn(#"Removed Columns", "data", {"hpId", "id", "name", "deliverByDate", "creatorName", "fulfillmentNotes", "requestNotes", "createdDate", "modifiedDate"}, {"hpId", "id", "name", "deliverByDate", "creatorName", "fulfillmentNotes", "requestNotes", "createdDate", "modifiedDate"}),
+    #"Filtered Rows" = Table.SelectRows(#"Expanded data", each [name] <> null and [name] <> "")
+in
+    #"Filtered Rows"
+
+// Trips
+let
+    HelipassAccessToken =Access_Token,
+    FirstPageUri = "https://hp-reporting-" & Customer & ".azurewebsites.net/trips" & "?access_token=" & HelipassAccessToken & "&count=1000000",
+    MaxPages = 21,
+    GetPage = (pageUri, nextFilter, dataFilter) =>        
+        let
+            Result = let
+                    PageUri = pageUri,          
+                    PageContent = Web.Contents(PageUri),
+                    Document = Json.Document(PageContent),
+                    PageData = dataFilter(Document),
+                    NextPageUri = nextFilter(Document)
+                in
+                    [ NextPageUri = NextPageUri, PageData = PageData ]
+        in
+            Result,
+            
+    GetPages = (firstPageUri, nextFilter, dataFilter) =>
+        let
+            //pump the API one page at a time, collecting a list of data tables
+            PageDataList = List.Generate(
+                () => [
+                        pageNumber = 1, 
+                        pageResult = GetPage(firstPageUri, nextFilter, dataFilter)
+                    ],
+                each [pageResult] <> null and [pageResult][PageData] <> null,
+                each [
+                        pageNumber = [pageNumber] + 1, 
+                        pageResult = 
+                            if [pageResult][NextPageUri] <> null 
+                            then GetPage([pageResult][NextPageUri], nextFilter, dataFilter)
+                            else null
+                    ],
+                each [pageResult][PageData]
+            ),
+            CombinedData = List.Combine(PageDataList)
+        in
+            CombinedData,
+    
+    LocationData = GetPages(
+         FirstPageUri,
+        (doc) => 
+            let
+                Links = try doc[links] otherwise null,
+                LinksTable = Table.FromRecords(Links),
+                NextLinksTable = Table.SelectRows(LinksTable, each [rel] = "next"),
+                NextLink = try NextLinksTable{0} otherwise null
+            in
+                try NextLink[href] otherwise null,                
+        (doc) => doc[data]
+    ),
+    LocationTable = Table.FromRecords(LocationData),
+    #"Removed Columns" = Table.RemoveColumns(LocationTable,{"links"}),
+    #"Expanded data" = Table.ExpandRecordColumn(#"Removed Columns", "data", {"tripDetailsId", "tripName", "maxSeats", "maxPayload", "passengerCount", "cargoCount", "legCount", "despatchNotes", "callsignName", "transportNumber", "tripStatus", "plannedDepartureTime", "actualDepartureTime", "pilotName", "copilotName", "crewWeight", "maxGrossWeight", "aircraftBasicWeight", "averageFuelBurnRate", "type", "manualLockState", "maxCargoBayCapacity", "cancelReason", "transportType", "serviceArea", "lockStatus", "fidsNote"}, {"tripDetailsId", "tripName", "maxSeats", "maxPayload", "passengerCount", "cargoCount", "legCount", "despatchNotes", "callsignName", "transportNumber", "tripStatus", "plannedDepartureTime", "actualDepartureTime", "pilotName", "copilotName", "crewWeight", "maxGrossWeight", "aircraftBasicWeight", "averageFuelBurnRate", "type", "manualLockState", "maxCargoBayCapacity", "cancelReason", "transportType", "serviceArea", "lockStatus", "fidsNote"}),
+    #"Filtered Rows" = Table.SelectRows(#"Expanded data", each [tripName] <> null and [tripName] <> "")
+in
+    #"Filtered Rows"
+
+// Waivers
+let
+    HelipassAccessToken =Access_Token,
+    FirstPageUri = "https://hp-reporting-" & Customer & ".azurewebsites.net/waivers" & "?access_token=" & HelipassAccessToken,
+    MaxPages = 21,
+    GetPage = (pageUri, nextFilter, dataFilter) =>        
+        let
+            Result = let
+                    PageUri = pageUri,          
+                    PageContent = Web.Contents(PageUri),
+                    Document = Json.Document(PageContent),
+                    PageData = dataFilter(Document),
+                    NextPageUri = nextFilter(Document)
+                in
+                    [ NextPageUri = NextPageUri, PageData = PageData ]
+        in
+            Result,
+            
+    GetPages = (firstPageUri, nextFilter, dataFilter) =>
+        let
+            //pump the API one page at a time, collecting a list of data tables
+            PageDataList = List.Generate(
+                () => [
+                        pageNumber = 1, 
+                        pageResult = GetPage(firstPageUri, nextFilter, dataFilter)
+                    ],
+                each [pageResult] <> null and [pageResult][PageData] <> null,
+                each [
+                        pageNumber = [pageNumber] + 1, 
+                        pageResult = 
+                            if [pageResult][NextPageUri] <> null 
+                            then GetPage([pageResult][NextPageUri], nextFilter, dataFilter)
+                            else null
+                    ],
+                each [pageResult][PageData]
+            ),
+            CombinedData = List.Combine(PageDataList)
+        in
+            CombinedData,
+    
+    LocationData = GetPages(
+         FirstPageUri,
+        (doc) => 
+            let
+                Links = try doc[links] otherwise null,
+                LinksTable = Table.FromRecords(Links),
+                NextLinksTable = Table.SelectRows(LinksTable, each [rel] = "next"),
+                NextLink = try NextLinksTable{0} otherwise null
+            in
+                try NextLink[href] otherwise null,                
+        (doc) => doc[data]
+    ),
+    LocationTable = Table.FromRecords(LocationData),
+    #"Removed Columns" = Table.RemoveColumns(LocationTable,{"links"})
+in
+    #"Removed Columns"
