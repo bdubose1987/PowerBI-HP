@@ -67,8 +67,6 @@ let
 in
     #"Renamed Columns"
 
-// Customer
-"shell" meta [IsParameterQuery=true, Type="Any", IsParameterQueryRequired=true]
 
 // Briefing Details
 let
